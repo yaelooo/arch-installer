@@ -1,0 +1,673 @@
+#!/bin/bash
+# Script for installing Arch Linux based on the installation guide.
+# Author: yaelooo
+
+# Set colors and styles for output
+RED=$(tput setaf 1)     ## error
+GREEN=$(tput setaf 2)   ## success
+YELLOW=$(tput setaf 3)  ## warning
+BLUE=$(tput setaf 4)    ## subtitle
+MAGENTA=$(tput setaf 5) ## title
+CYAN=$(tput setaf 6)    ## info
+NORMAL=$(tput sgr0)     ## reset
+REVERSE=$(tput smso)    ## reversed
+UNDERLINE=$(tput smul)  ## underline
+
+# Set functions to print colored messages
+## Whitout press_continue
+function title() { printf ${MAGENTA}${REVERSE}${UNDERLINE}'%s' "$1" ${NORMAL}; }
+function subtitle() { printf ${BLUE}${UNDERLINE}'\n\n%s' "$1"${NORMAL}; }
+function command_out() { printf ${BLUE}${UNDERLINE}'\n\n%s\n\n' "$1"${NORMAL}" $2 "${BLUE}${UNDERLINE}"$3"${NORMAL}; }
+function command_no_out() { printf ${BLUE}${UNDERLINE}'\n\n%s' "$1"${NORMAL}" $2 "${BLUE}${UNDERLINE}"$3"${NORMAL}; }
+function info() { printf ${CYAN}'\n\n%s' "$1"${NORMAL}; }
+function warning() { printf ${YELLOW}'\n\n%s' "$1"${NORMAL}; }
+function success() { printf ${GREEN}'\n\n%s' "$1"${NORMAL}; }
+function error() { printf ${RED}'\n\n%s' "$1"${NORMAL}; }
+## With press_continue
+function success_p() {
+  success "$1"
+  press_continue
+}
+function error_p() {
+  error "$1"
+  press_continue
+}
+
+# Set function to check if the user wants to continue, press [Enter] or type (y/n), or exit
+function question_continue_exit() {
+  warning "$1 Press [Enter] or type (y/n): "
+  read answer
+  if [ -z "$answer" ] || [ "$answer" = 'y' ]; then
+    clear
+  elif [ "$answer" = 'n' ]; then
+    error 'Exiting script...'
+    exit 1
+  else
+    clear
+    error "$answer is an invalid option"
+    question_continue "$1"
+  fi
+}
+
+# Set function to press any key
+function press() {
+  printf '\n\n'
+  for i in {145..1}; do
+    printf ${YELLOW}"\rPress any key to continue or await $i seconds to $1 automatically." ${NORMAL}
+    if read -t 1 -n 1; then
+      break
+    fi
+  done
+  clear
+}
+
+# Set function to press to continue
+function press_continue() {
+  press 'continue'
+}
+
+# Set function to press to exit
+function press_exit() {
+  error "$1"
+  press 'exit'
+  error 'Exiting script...'
+  exit 1
+}
+
+# Set function to convert to lowercase
+function to_lowercase() {
+  echo "$1" | tr '[:upper:]' '[:lower:]'
+}
+
+# Set function to validate and convert to lowercase
+function validate_input() {
+  local type_message="$1"
+  local text_message="$2"
+  local input_method="$3"
+  unset $4
+
+  "$type_message" "$text_message "
+  local input
+  $input_method input
+  if [ -z "$input" ]; then
+    error_p "No value entered, please insert a value."
+  elif [[ "$input" =~ \  ]]; then
+    error_p "'$input' is an invalid value, insert only one argument without spaces."
+  else
+    input=$(to_lowercase "$input")
+    eval $4=\"$input\"
+  fi
+}
+
+function validate_lower() {
+  validate_input "$1" "$2" 'read' "$3"
+}
+
+function validate_lower_hide() {
+  validate_input "$1" "$2" 'read -s' "$3"
+}
+
+# Set trap to interrupt the script
+trap "printf '\n'; error 'Script interrupted by user, exiting script...'; exit 1" INT
+
+# Message for the user
+clear
+title 'ARCH LINUX INSTALLATION SCRIPT'
+subtitle 'This script is based on the Arch Linux installation guide.'
+info 'https://wiki.archlinux.org/title/installation_guide'
+warning 'This installation will be using the UEFI boot mode and the GRUB bootloader.'
+question_continue_exit 'Do you want to continue with the installation?'
+
+# Verify prerequisites
+## Check if the system is based on Arch Linux
+[ -f /etc/os-release ] && source /etc/os-release
+if [ "$ID" != 'arch' ]; then
+  title 'CHECKING IF THE SYSTEM IS BASED ON ARCH LINUX'
+  press_exit 'This script is only for Arch Linux based systems.'
+fi
+## Check if the script is running as root
+if [ $(id -u) -ne 0 ]; then
+  title 'CHECKING IF THE SCRIPT IS RUNNING AS ROOT'
+  press_exit 'The script must be run as root.'
+fi
+## Check for an active internet connection
+if ! ping -c 1 google.com >/dev/null 2>&1; then
+  title 'CHECKING FOR AN ACTIVE INTERNET CONNECTION'
+  press_exit 'No active internet connection.'
+fi
+## Check if the system is booted in UEFI mode
+if [ ! -d /sys/firmware/efi/efivars ]; then
+  title 'CHECKING IF THE SYSTEM IS BOOTED IN UEFI MODE'
+  press_exit 'The system is not booted in UEFI mode.'
+fi
+
+# Resize cowspace / https://wiki.archlinux.org/title/archiso#Adjusting_the_size_of_the_root_file_system
+title 'RESIZING COWSPACE'
+command_no_out 'Run' 'mount -o remount,size=4G /run/archiso/cowspace' 'to resize cowspace to 4G.'
+mount -o remount,size=4G /run/archiso/cowspace
+success_p 'COWSPACE RESIZED'
+
+# 1.0 Pre-installation / https://wiki.archlinux.org/title/installation_guide#Pre-installation
+## 1.5 Set the console keyboard layout and font / https://wiki.archlinux.org/title/installation_guide#Set_the_console_keyboard_layout_and_font
+title 'SETTING THE CONSOLE KEYBOARD LAYOUT AND FONT'
+command_no_out 'Run' 'loadkeys us' 'to set the keyboard layout to US.'
+loadkeys us
+success_p 'KEYBOARD LAYOUT SET'
+
+## 1.8 Update the system clock / https://wiki.archlinux.org/title/installation_guide#Update_the_system_clock
+title 'UPDATING THE SYSTEM CLOCK'
+command_no_out 'Run' 'timedatectl set-ntp true' 'to update the system clock.'
+timedatectl set-ntp true
+success_p 'SYSTEM CLOCK UPDATED'
+
+## 1.9 Partition the disks / https://wiki.archlinux.org/title/installation_guide#Partition_the_disks
+title 'PARTITIONING THE DISKS'
+warning 'Save the order of the partitions to avoid mistakes, as it will be required in the next step.'
+question_continue_exit 'Do you want to continue?'
+while true; do
+  title 'PARTITIONING THE DISKS'
+  ### List the disks to select the disk to partition
+  command_out 'Run' 'lsblk' 'to list the disks.'
+  lsblk
+  validate_lower 'info' 'Select the disk to partition (e.g. /dev/sda):' 'disk'
+  if [ -n "$disk" ]; then
+    if lsblk "$disk" >/dev/null 2>&1; then
+      warning "You are sure that $disk is the disk to partition?, this will delete all data in the disk."
+      warning 'Do you want to continue? Press [Enter] or type (y/n): '
+      read answer
+      if [ -z "$answer" ] || [ "$answer" = 'y' ]; then
+        ### Partition the disk selected
+        cfdisk $disk
+        clear
+        title 'PARTITIONING THE DISKS'
+        command_no_out 'Run' "cfdisk $disk" 'to partition the disk.'
+        success "Disk $disk partitioned."
+        warning 'Do you want to partition another disk? Press [Enter] to not or type (y/n): '
+        read answer
+        if [ "$answer" = 'y' ]; then
+          warning 'Partition another disk.'
+          press_continue
+        elif [ -z "$answer" ] || [ "$answer" = 'n' ]; then
+          clear
+          title 'PARTITIONING THE DISKS'
+          success_p 'DISKS PARTITIONED'
+          break
+        fi
+      else
+        clear
+      fi
+    else
+      error_p "$disk doesn't exist, please select a valid disk."
+    fi
+  fi
+done
+### end
+
+## 1.10 Format the partitions / https://wiki.archlinux.org/title/installation_guide#Format_the_partitions
+### Root partition
+while true; do
+  title 'FORMATTING THE PARTITIONS'
+  warning 'Root partition.'
+  #### List the partitions to select the root partition
+  command_out 'Run' 'lsblk' 'to list the partitions.'
+  lsblk
+  validate_lower 'info' 'Select the root partition (e.g. /dev/sda1):' 'root'
+  if [ -n "$root" ]; then
+    if lsblk "$root" >/dev/null 2>&1; then
+      warning "You are sure that $root is the root partition?, this will delete all data in the partition."
+      warning 'Do you want to continue? Press [Enter] or type (y/n): '
+      read answer
+      if [ -z "$answer" ] || [ "$answer" = 'y' ]; then
+        while true; do
+          #### Umount the root partition
+          if mount | grep -q "$root"; then
+            warning "The root partition $root is mounted, this will unmount the partition."
+            warning 'Do you want to continue? Press [Enter] or type (y/n): '
+            read answer
+            if [ -z "$answer" ] || [ "$answer" = 'y' ]; then
+              command_no_out 'Run' "umount $root" 'to unmount the partition.'
+              umount -l $root
+              success "Partition $root unmounted."
+            elif [ "$answer" = 'n' ]; then
+              press_exit 'Exiting script...'
+            fi
+          fi
+          clear
+          title 'FORMATTING THE PARTITIONS'
+          warning "Root partition selected $root"
+          #### List the partitions to select the format for the root partition
+          command_out 'Run' 'lsblk' 'to list the partitions.'
+          lsblk
+          validate_lower 'info' 'Select the format do you want to use for the root partition? (ext4/btrfs):' 'format'
+          if [ -n "$format" ]; then
+            if [ "$format" = 'ext4' ]; then
+              #### Format the root partition as ext4
+              command_out 'Run' "mkfs.ext4 $root -F" 'to format the root partition.'
+              mkfs.ext4 "$root" -F
+              break
+            elif [ "$format" = 'btrfs' ]; then
+              #### Format the root partition as btrfs
+              command_out 'Run' "mkfs.btrfs $root -F" 'to format the root partition.'
+              mkfs.btrfs "$root" -f
+              break
+            else
+              error_p "$format is an invalid format for $root. Please select ext4 or btrfs."
+            fi
+          fi
+        done
+        #### end
+        success_p "Root partition $root formatted as $format."
+        break
+      fi
+      clear
+    else
+      error_p "$root is an invalid partition for root."
+    fi
+  fi
+done
+### EFI partition
+while true; do
+  title 'FORMATTING THE PARTITIONS'
+  warning 'EFI partition.'
+  #### List the partitions to select the EFI partition
+  command_out 'Run' 'lsblk' 'to list the partitions.'
+  lsblk
+  validate_lower 'info' 'Select the EFI partition (e.g. /dev/sda2):' 'efi'
+  if [ -n "$efi" ]; then
+    if lsblk "$efi" >/dev/null 2>&1; then
+      warning "You are sure that $efi is the EFI partition?, this will delete all data in the partition."
+      warning 'Do you want to continue? Press [Enter] or type (y/n): '
+      read answer
+      if [ -z "$answer" ] || [ "$answer" = 'y' ]; then
+        #### Unmount the EFI partition
+        if mount | grep -q "$efi"; then
+          warning "The efi partition $efi is mounted, this will unmount the partition."
+          warning 'Do you want to continue? Press [Enter] or type (y/n): '
+          read answer
+          if [ -z "$answer" ] || [ "$answer" = 'y' ]; then
+            command_no_out 'Run' "umount $efi" 'to unmount the partition.'
+            umount -l $efi
+            success "Partition $efi unmounted."
+          elif [ "$answer" = 'n' ]; then
+            press_exit 'Exiting script...'
+          fi
+        fi
+        #### Format the EFI partition as FAT32
+        command_out 'Run' "mkfs.fat -F32 $efi" 'to format the EFI partition.'
+        mkfs.fat -F32 $efi
+        success_p "EFI partition $efi formatted."
+        break
+      fi
+      clear
+    else
+      error_p "$efi is an invalid partition for EFI."
+    fi
+  fi
+done
+### Swap partition
+title 'FORMATTING THE PARTITIONS'
+warning 'Swap partition.'
+warning 'Do you want to create a swap partition? Press [Enter] to not or type (y/n): '
+read swap
+if [ "$swap" = 'y' ]; then
+  clear
+  while true; do
+    title 'FORMATTING THE PARTITIONS'
+    warning 'Swap partition.'
+    #### List the partitions to select the swap partition
+    command_out 'Run' 'lsblk' 'to list the partitions.'
+    lsblk
+    validate_lower 'info' 'Select the swap partition (e.g. /dev/sda3):' 'swap'
+    if [ -n "$swap" ]; then
+      if lsblk "$swap" >/dev/null 2>&1; then
+        warning "You are sure that $swap is the swap partition?, this will delete all data in the partition."
+        warning 'Do you want to continue? Press [Enter] or type (y/n): '
+        read answer
+        if [ -z "$answer" ] || [ "$answer" = 'y' ]; then
+          #### Unmount the swap partition
+          if mount | grep -q "$swap"; then
+            warning "The swap partition $swap is mounted, this will unmount the partition."
+            warning 'Do you want to continue? Press [Enter] or type (y/n): '
+            read answer
+            if [ -z "$answer" ] || [ "$answer" = 'y' ]; then
+              command_no_out 'Run' "umount $swap" 'to unmount the partition.'
+              umount -l $swap
+              success "Partition $swap unmounted."
+            elif [ "$answer" = 'n' ]; then
+              press_exit 'Exiting script...'
+            fi
+          fi
+          #### Format the swap partition
+          command_out 'Run' "mkswap $swap" 'to format the swap partition.'
+          mkswap $swap
+          success "Swap partition $swap formatted."
+          #### Activate the swap partition
+          command_out 'Run' "swapon $swap" 'to activate the swap partition.'
+          swapon $swap
+          success "Swap partition $swap activated."
+          break
+        fi
+        clear
+      else
+        error_p "$swap is an invalid partition for swap."
+      fi
+    fi
+  done
+elif [ -z "$swap" ] || [ "$swap" = 'n' ]; then
+  success 'Swap partition was not created.'
+fi
+### end
+success_p 'PARTITIONS FORMATTED'
+
+## 1.11 Mount the file systems / https://wiki.archlinux.org/title/installation_guide#Mount_the_file_systems
+title 'MOUNTING THE FILE SYSTEMS'
+warning 'Root partition.'
+### Mount the root partition
+command_no_out 'Run' "mount $root /mnt" 'to mount the root partition on /mnt'
+mount $root /mnt
+success "Root partition $root mounted."
+warning 'EFI partition.'
+### Mount the EFI partition
+command_no_out 'Run' "mount --mkdir $efi /mnt/boot" 'to mount the EFI partition on /mnt/boot'
+mount --mkdir $efi /mnt/boot
+success "EFI partition $efi mounted."
+### end
+success_p 'FILE SYSTEMS MOUNTED'
+
+# 2.0 Installation / https://wiki.archlinux.org/title/installation_guide#Installation
+## 2.1 Select the mirrors / https://wiki.archlinux.org/title/installation_guide#Select_the_mirrors
+title 'CONFIGURING THE MIRRORLIST'
+warning 'The next command will configure the mirrorlist.'
+info 'reflector --country US --protocol http --protocol https --sort rate --save /etc/pacman.d/mirrorlist'
+warning 'Do you want to configure the mirrorlist? Press [Enter] to not or type (y/n): '
+read mirror
+if [ "$mirror" = 'y' ]; then
+  clear
+  title 'CONFIGURING THE MIRRORLIST'
+  if [ -f /etc/pacman.d/mirrorlist ]; then
+    ### Save a backup of the mirrorlist
+    command_no_out 'Run' 'mv /etc/pacman.d/mirrorlist /etc/pacman.d/mirrorlist.old' 'to save a backup of the mirrorlist.'
+    mv /etc/pacman.d/mirrorlist /etc/pacman.d/mirrorlist.old
+    success 'Backup created in /etc/pacman.d/mirrorlist.old'
+  fi
+  ### Configure the mirrorlist
+  command_no_out 'Run' 'reflector --country US --protocol http --protocol https --sort rate --save /etc/pacman.d/mirrorlist' 'to configure the mirrorlist.'
+  warning 'This process may take a few minutes, please wait...'
+  reflector --country US --protocol http --protocol https --sort rate --save /etc/pacman.d/mirrorlist 2>/dev/null
+  success_p 'MIRRORLIST CONFIGURED'
+elif [ -z "$mirror" ] || [ "$mirror" = 'n' ]; then
+  success_p 'MIRRORLIST WAS NOT CONFIGURED'
+fi
+
+## 2.2 Install essential packages / https://wiki.archlinux.org/title/installation_guide#Install_essential_packages
+title 'INSTALLING ESSENTIAL PACKAGES'
+### Update the package database
+command_out 'Run' 'pacman -Syy' 'to update the package database.'
+pacman -Syy
+success 'Package database updated.'
+### Just in case, verifying the master keys / https://wiki.archlinux.org/title/Pacman/Package_signing#Verifying_the_master_keys
+command_out 'Run' 'pacman-key --populate archlinux' 'to verify the master keys.'
+pacman-key --populate archlinux
+success 'Master keys verified.'
+### Install the archlinux-keyring package
+command_out 'Run' 'pacman -Sy archlinux-keyring --noconfirm' 'to install the archlinux-keyring package.'
+pacman -Sy archlinux-keyring --noconfirm
+success 'Archlinux-keyring package installed.'
+### Install the base and linux-zen kernel
+command_out 'Run' 'pacstrap -K /mnt base linux-zen linux-zen-headers' 'to install the arch base and linux-zen kernel.'
+pacstrap -K /mnt base linux-zen linux-zen-headers
+success 'Base and linux-zen kernel installed.'
+### Install essential packages
+command_out 'Run' 'pacstrap -K /mnt base-devel btrfs-progs efibootmgr, ...' 'to install essential packages.'
+pacstrap -K /mnt base-devel btrfs-progs efibootmgr e2fsprogs dosfstools ntfs-3g parted netctl networkmanager dhcpcd inetutils net-tools diffutils less logrotate man-db man-pages texinfo nano vi perl usbutils which --needed
+success 'Essential packages installed.'
+### Install additional packages
+command_out 'Run' 'pacstrap -K /mnt iw wireless_tools wpa_supplicant dialog alsa-utils' 'to install additional packages.'
+pacstrap -K /mnt iw wireless_tools wpa_supplicant dialog alsa-utils --needed
+success 'Additional packages installed.'
+### end
+success_p 'ESSSENTIAL PACKAGES INSTALLED'
+
+# 3.0 Configure the system / https://wiki.archlinux.org/title/installation_guide#Configure_the_system
+## 3.1 Fstab / https://wiki.archlinux.org/title/installation_guide#Fstab
+title 'GENERATING AN FSTAB FILE'
+command_no_out 'Run' 'genfstab -U /mnt >> /mnt/etc/fstab' 'to generate an fstab file.'
+genfstab -U /mnt >>/mnt/etc/fstab
+success_p 'FSTAB FILE GENERATED'
+
+## 3.3 Time / https://wiki.archlinux.org/title/installation_guide#Time
+title 'SETTING THE TIME ZONE'
+### Set the time zone
+command_no_out 'Run' 'ln -sf /mnt/usr/share/zoneinfo/America/Mexico_City /mnt/etc/localtime' 'to set the time zone.'
+ln -sf /mnt/usr/share/zoneinfo/America/Mexico_City /mnt/etc/localtime
+success 'Time zone set.'
+### Set the hardware clock
+command_no_out 'Run' 'arch-chroot /mnt hwclock --systohc' 'to set the hardware clock.'
+arch-chroot /mnt hwclock --systohc
+success 'Hardware clock set.'
+### end
+success_p 'TIME ZONE SET'
+
+## 3.4 Localization / https://wiki.archlinux.org/title/installation_guide#Localization
+title 'SETTING LOCALIZATION'
+### Configure the locale.gen file
+command_no_out 'Run' 'sed -i s/#en_US.UTF-8 UTF-8/en_US.UTF-8 UTF-8/ /mnt/etc/locale.gen' 'to uncomment the en_US.UTF-8 UTF-8 locale.'
+sed -i 's/#en_US.UTF-8 UTF-8/en_US.UTF-8 UTF-8/' /mnt/etc/locale.gen
+success 'Locale uncommented.'
+### Generate the locale
+command_no_out 'Run' 'arch-chroot /mnt locale-gen' 'to generate the locale.'
+arch-chroot /mnt locale-gen >/dev/null
+success 'Locale generated.'
+### Configure the locale.conf file
+command_no_out 'Run' 'echo LANG=en_US.UTF-8 > /mnt/etc/locale.conf' 'to set the LANG variable.'
+echo 'LANG=en_US.UTF-8' >/mnt/etc/locale.conf
+success 'Locale set.'
+### Configure the vconsole.conf file
+command_no_out 'Run' 'echo KEYMAP=us > /mnt/etc/vconsole.conf' 'to set the KEYMAP variable.'
+echo 'KEYMAP=us' >/mnt/etc/vconsole.conf
+success 'Keymap set.'
+### Configure the X11 keymap
+command_no_out 'Run' 'localectl set-x11-keymap us' 'to set the X11 keymap.'
+arch-chroot /mnt localectl set-x11-keymap us
+success 'X11 keymap set.'
+### end
+success_p 'LOCALIZATION SET'
+
+## 3.5 Network configuration / https://wiki.archlinux.org/title/installation_guide#Network_configuration
+while true; do
+  title 'NETWORK CONFIGURATION'
+  ### Set the hostname
+  validate_lower 'warning' 'Type the hostname for the system:' 'hostname'
+  if [ -n "$hostname" ]; then
+    command_no_out 'Run' "echo $hostname >/mnt/etc/hostname" 'to set the hostname.'
+    info "The hostname for the system is $hostname"
+    warning 'Do you want to continue? Press [Enter] or type (y/n): '
+    read continue
+    if [ -z "$continue" ] || [ "$continue" = 'y' ]; then
+      echo $hostname >/mnt/etc/hostname
+      success_p "Hostname $hostname set."
+      break
+    fi
+    clear
+  fi
+done
+title 'NETWORK CONFIGURATION'
+if [ -f /mnt/etc/hosts ]; then
+  ### Save a backup of the hosts file
+  command_no_out 'Run' 'mv /mnt/etc/hosts /mnt/etc/hosts.old' 'to save a backup of the hosts file.'
+  mv /mnt/etc/hosts /mnt/etc/hosts.old
+  success 'Backup created of the hosts file.'
+fi
+### Configure the hosts file
+command_no_out 'Run' 'echo ... >>/mnt/etc/hosts' 'to set the hosts file.'
+echo '127.0.0.1    localhost' >>/mnt/etc/hosts
+echo -en '\n' >>/mnt/etc/hosts
+echo '::1          localhost ip6-localhost ip6-loopback' >>/mnt/etc/hosts
+echo 'ff02::1      ip6-allnodes' >>/mnt/etc/hosts
+echo 'ff02::2      ip6-allrouters' >>/mnt/etc/hosts
+success 'Hosts file set.'
+### end
+success_p 'NETWORK CONFIGURATION SET'
+
+## 3.7 Root password / https://wiki.archlinux.org/title/installation_guide#Root_password
+while true; do
+  title 'SETTING THE ROOT PASSWORD'
+  validate_lower_hide 'warning' 'Type the password for the root user:' 'password'
+  if [ -n "$password" ]; then
+    validate_lower_hide 'warning' 'Retype the password for the root user:' 'password2'
+    if [ -n "$password2" ]; then
+      if [ "$password" = "$password2" ]; then
+        ### Set the password for the root user using chpasswd
+        command_no_out 'Run' 'arch-chroot /mnt chpasswd <<< root:password' 'to set the password for the root user.'
+        arch-chroot /mnt chpasswd <<<"root:$password"
+        success_p 'ROOT PASSWORD SET'
+        break
+      else
+        error_p "The passwords don't match, please try again."
+      fi
+    fi
+  fi
+done
+
+## 3.8 Boot loader / https://wiki.archlinux.org/title/installation_guide#Boot_loader
+title 'INSTALLING AND CONFIGURING THE BOOTLOADER'
+### Install the bootloader packages
+command_out 'Run' 'pacstrap /mnt grub efibootmgr os-prober lzop fuse3 --needed' 'to install the bootloader.'
+pacstrap /mnt grub efibootmgr os-prober lzop fuse3 --needed
+success 'Bootloader installed.'
+### Install the bootloader to the disk
+command_out 'Run' 'arch-chroot /mnt grub-install --target=x86_64-efi --efi-directory=/boot --bootloader-id=GRUB --recheck' 'to install the bootloader.'
+arch-chroot /mnt grub-install --target=x86_64-efi --efi-directory=/boot --bootloader-id=GRUB --recheck
+success 'Bootloader installed.'
+### Generate the configuration file
+command_out 'Run' 'grub-mkconfig -o /boot/grub/grub.cfg' 'to generate the configuration file.'
+arch-chroot /mnt grub-mkconfig -o /boot/grub/grub.cfg
+success 'Bootloader configuration file generated.'
+### end
+success_p 'BOOTLOADER INSTALLED AND CONFIGURED'
+
+# Some additional configurations
+## Enabling some services
+title 'ENABLING SOME SERVICES'
+### Enable NetworkManager
+command_no_out 'Run' 'arch-chroot /mnt systemctl enable NetworkManager' 'to enable the NetworkManager service.'
+arch-chroot /mnt systemctl enable NetworkManager
+success 'NetworkManager service enabled.'
+### Enable dhcpcd
+command_no_out 'Run' 'arch-chroot /mnt systemctl enable dhcpcd' 'to enable the dhcpcd service.'
+arch-chroot /mnt systemctl enable dhcpcd
+success 'dhcpcd service enabled.'
+### Enable systemd-timesyncd
+command_no_out 'Run' 'arch-chroot /mnt systemctl enable systemd-timesyncd' 'to enable the systemd-timesyncd service.'
+arch-chroot /mnt systemctl enable systemd-timesyncd
+success 'systemd-timesyncd service enabled.'
+### end
+success_p 'SOME SERVICES ENABLED'
+
+## Copy the new mirrorlist to the new system
+if [ -f /etc/pacman.d/mirrorlist.old ]; then
+  title 'COPYING THE MIRRORLIST TO THE NEW SYSTEM'
+  ### Save a backup of the actual mirrorlist
+  if [ ! -f /mnt/etc/pacman.d/mirrorlist ]; then
+    command_no_out 'Run' 'mv /mnt/etc/pacman.d/mirrorlist.old /mnt/etc/pacman.d/mirrorlist.old' 'to save a backup of the actual mirrorlist.'
+    mv /mnt/etc/pacman.d/mirrorlist.old /mnt/etc/pacman.d/mirrorlist.old
+    success 'Backup created of the mirrorlist.'
+  fi
+  ### Copy the mirrorlist to the new system
+  command_no_out 'Run' 'cp /etc/pacman.d/mirrorlist /mnt/etc/pacman.d/mirrorlist' 'to copy the mirrorlist to the new system.'
+  cp /etc/pacman.d/mirrorlist /mnt/etc/pacman.d/mirrorlist
+  success_p 'MIRRORLIST COPIED TO THE NEW SYSTEM'
+fi
+
+## Add a user and set passwd / https://wiki.archlinux.org/title/users_and_groups
+while true; do
+  title 'CREATING A NEW USER'
+  validate_lower 'warning' 'Type the username for the new user:' 'username'
+  if [ -n "$username" ]; then
+    info "The username for the new user is $username"
+    warning 'Do you want to continue? Press [Enter] or type (y/n): '
+    read continue
+    if [ -z "$continue" ] || [ "$continue" = 'y' ]; then
+      ### Run useradd to create a new user and add it to the wheel group
+      command_no_out 'Run' "arch-chroot /mnt useradd -m -g users -G wheel -s /bin/bash $username" 'to create a new user.'
+      arch-chroot /mnt useradd -m -g users -G wheel -s /bin/bash "${username}"
+      success_p "User $username created."
+      break
+    fi
+    clear
+  fi
+done
+while true; do
+  title 'CREATING A NEW USER'
+  validate_lower_hide 'warning' "Type the password for the new user $username:" 'password'
+  if [ -n "$password" ]; then
+    validate_lower_hide 'warning' "Retype the password for the new user $username:" 'password2'
+    if [ -n "$password2" ]; then
+      if [ "$password" = "$password2" ]; then
+        ### Set the password for the new user using chpasswd
+        command_no_out 'Run' "arch-chroot /mnt chpasswd <<< $username:password" "to set the password for the new user $username."
+        arch-chroot /mnt chpasswd <<<"$username:$password"
+        success_p "Password set for the new user $username."
+        break
+      else
+        error_p "The passwords don't match, please try again."
+      fi
+    fi
+  fi
+done
+### Uncomment the %wheel ALL=(ALL:ALL) ALL line in the sudoers file
+title 'CREATING A NEW USER'
+command_no_out 'Run' "sed -i 's/# %wheel ALL=(ALL:ALL) ALL/%wheel ALL=(ALL:ALL) ALL/' /mnt/etc/sudoers" 'to uncomment the line in the sudoers file.'
+sed -i 's/# %wheel ALL=(ALL:ALL) ALL/%wheel ALL=(ALL:ALL) ALL/' /mnt/etc/sudoers
+success 'Line uncommented in the sudoers file.'
+### end
+success_p 'NEW USER CREATED'
+
+## Install yay / https://github.com/Jguer/yay
+title 'INSTALLING YAY'
+warning 'Do you want to install yay? Press [Enter] or type (y/n): '
+read yay
+if [ -z "$yay" ] || [ "$yay" = 'y' ]; then
+  warning 'At the end of the installation, the script will ask for the password of the new user.'
+  press_continue
+  ### Install the necessary packages
+  command_out 'Run' 'arch-chroot /mnt pacman -Syu git go --noconfirm' 'to install the necessary packages.'
+  arch-chroot /mnt pacman -Syu git go --noconfirm
+  success 'Necessary packages installed.'
+  ### Clone the yay repository, change the owner and install yay
+  command_out 'Run' "arch-chroot /mnt sudo -u $username git clone https://aur.archlinux.org/yay.git" 'to clone the yay repository.'
+  arch-chroot /mnt /bin/bash -c "
+    cd /home/$username && git clone https://aur.archlinux.org/yay.git &&
+    chown -R $username:users yay &&
+    cd yay &&
+    sudo -u $username makepkg -si --noconfirm
+    yay -R yay-debug --noconfirm
+  "
+  success 'Yay installed.'
+  ### end
+  success_p 'YAY INSTALLED'
+else
+  success_p 'YAY WAS NOT INSTALLED'
+fi
+
+# 4.0 Reboot / https://wiki.archlinux.org/title/installation_guide#Reboot
+## Unmount partitions
+title 'UNMOUNTING PARTITIONS'
+command_no_out 'Run' 'umount -R /mnt' 'to unmount the partitions.'
+umount -R /mnt
+success_p 'PARTITIONS UNMOUNTED'
+
+## Reboot
+title 'INSTALLATION COMPLETE'
+subtitle 'The installation is complete.'
+warning 'Do you want to reboot the system? Press [Enter] or type (y/n): '
+read reboot
+if [ -z "$reboot" ] || [ "$reboot" = 'y' ]; then
+  command_no_out 'Run' 'reboot' 'to reboot the system.'
+  success 'Rebooting system...'
+  press_continue
+  reboot
+else
+  success 'Exiting script...'
+  exit 0
+fi
