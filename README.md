@@ -29,7 +29,7 @@ wget -O- https://github.com/yaelooo/arch-installer/tarball/master | tar xz
 
 ### With curl.
 ```
-curl -sL https://github.com/yaelooo/arch-installer/tarball/master | tar xz
+curl -L https://github.com/yaelooo/arch-installer/tarball/master | tar xz
 ```
 
 ## How to use.
