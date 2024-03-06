@@ -52,7 +52,7 @@ function question_continue_exit() {
 # Set function to press any key
 function press() {
   printf '\n\n'
-  for i in {145..1}; do
+  for i in {30..1}; do
     printf ${YELLOW}"\rPress any key to continue or await $i seconds to $1 automatically." ${NORMAL}
     if read -t 1 -n 1; then
       break

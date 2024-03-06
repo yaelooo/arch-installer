@@ -3,6 +3,8 @@
 </h1>
 <h4 align="center">Please read the <a href="https://wiki.archlinux.org/title/installation_guide">Arch Linux installation guide</a> before running this script.</h4>
 
+![installation](https://github.com/yaelooo/arch-installer/blob/main/image/installation.png)
+
 ## To do
 - [ ] Minimal script
 - [ ] Add compatibility for MBR
