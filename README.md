@@ -1,9 +1,9 @@
 <h1 align="center">
-  <a href=https://www.archlinux.org>Archlinux</a> Installer
+  <a href="https://www.archlinux.org">Archlinux</a> Installer
 </h1>
 <h4 align="center">Please read the <a href="https://wiki.archlinux.org/title/installation_guide">Arch Linux installation guide</a> before running this script.</h4>
 
-![installation](https://github.com/yaelooo/arch-installer/blob/main/.ignore/arch-installer.webp)
+![installation](https://raw.githubusercontent.com/yaelooo/arch-installer/main/.ignore/arch-installer.webp)
 
 ## To do
 
